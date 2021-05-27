@@ -14,7 +14,7 @@ function run() {
 
   var sheet = SpreadsheetApp.openById(spreadsheetId).getSheetByName(sheetName);
   var rowCount = sheet.getLastRow();
-  console.log("Found %s rows in the sheet called %s", sheet.getLastRow(), sheetName);
+  // console.log("Found %s rows in the sheet called %s", sheet.getLastRow(), sheetName);
 
   for (taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
     var task = tasks[taskIndex];
@@ -24,9 +24,15 @@ function run() {
       console.log("Task %s not found in the spreadsheet; will add at row %s", task.title, rowIndex);
       rowCount++;
     } else {
-      console.log("Found task %s in row %s, will update with retrieved content", task.title, rowIndex);
+      // console.log("Found task %s in row %s, will update with retrieved content", task.title, rowIndex);
     }
-    setSheetRow(sheet, rowIndex, task);
+    var taskObjects = getTaskObjects(task);
+    if (hasChanged(sheet, rowIndex, taskObjects)) {
+        updateSheet(sheet, rowIndex, taskObjects);
+        console.log("Updated sheet with task %s", task.title);
+    } else {
+      // console.log("No change detected in task %s", task.title);
+    }
   }
 
 }
@@ -47,6 +53,7 @@ function getTaskListId(taskListName) {
 
 function getTasks(listId) {
   var params = {
+    // dueMax: formatDate(getToday()),
     showHidden: true,
     showCompleted: true
   };
@@ -66,23 +73,52 @@ function findTask(sheet, taskId) {
   }
 }
 
-function setSheetRow(sheet, row, task) {
-  sheet.getRange(row,1,1,1).setValue(task.id);
-  sheet.getRange(row,2,1,1).setValue(task.title);
-  sheet.getRange(row,3,1,1).setValue(task.notes);
-  if (!task.due) {
-    sheet.getRange(row,4,1,1).clear();
-  } else {
-    sheet.getRange(row,4,1,1).setValue(formatDate(task.due));
-  }
-  if (!task.completed) {
-    sheet.getRange(row,5,1,1).clear();
-  } else {
-    sheet.getRange(row,5,1,1).setValue(formatDate(task.completed));
+function updateSheet(sheet, row, taskObjects) {
+  for (index = 0; index < taskObjects.length; index++) {
+    if (taskObjects[index] === null) {
+      sheet.getRange(row,index+1,1,1).clear();
+    } else {
+      sheet.getRange(row,index+1,1,1).setValue(taskObjects[index]);
+    }
   }
 }
 
+function getTaskObjects(task) {
+  var objects = [task.id, task.title, task.notes, "", ""];
+  if (task.due) {
+    objects[3] = getStandardizedDate(task.due);
+  }
+  if (task.completed) {
+    objects[4] = getStandardizedDate(task.completed);
+  }
+  return objects;
+}
+
+function hasChanged(sheet, rowIndex, taskObjects) {
+  var sheetObjects = sheet.getSheetValues(rowIndex,1,1,5)[0];
+  for (index = 0; index < taskObjects.length; index++) {
+    var obj1 = sheetObjects[index];
+    var obj2 = taskObjects[index];
+    if (obj1 instanceof Date) {
+      obj1 = obj1.getTime();
+    }
+    if (obj2 instanceof Date) {
+      obj2 = obj2.getTime();
+    }
+    if (obj1 !== obj2) {
+      console.log("Found a change in task %s, with value [%s] changing from %s to %s", taskObjects[1], index, obj1, obj2)
+      return true;
+    }
+  }
+  return false;
+}
+
+function getStandardizedDate(dateString) {
+  var dateObject = new Date(dateString); //date object based on task timezone
+  var dateString = formatDate(dateObject); //date string based on UTC
+  return new Date(dateString); //Same date/time but UTC based
+}
+
 function formatDate(date) {
-  date = new Date(date);
   return Utilities.formatDate(date, 'UTC', 'MM/dd/yyyy HH:mm:ss');
 }
